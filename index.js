@@ -4,16 +4,27 @@ import cron from 'node-cron';
 import fs from 'fs';
 
 const URL_AVITO_PROFILE = 'https://www.avito.ru/user/f9c2c9b95c387c86227f847540f011db/profile';
-const PARSING_FREQUENCY_PROFILE = '*/2 * * * *';
-const PARSING_FREQUENCY_PRODUCT = '*/2 * * * *';
+const PARSING_FREQUENCY = '*/2 * * * *';
 let dataFromDatabase = [];
 let dataForRecording = [];
 
 startParser();
 async function startParser() {
-    await getDataFromDatabase()
+    dataFromDatabase = [];
+    dataForRecording = [];
+    await getDataFromDatabase();
     await parserAvitoProfile();
-    parserAvitoProduct()
+    // await parserAvitoProduct();
+}
+
+async function getDataFromDatabase() {
+    try {
+        const data = fs.readFileSync('data.json', { encoding: 'utf8', flag: 'r' });
+        dataFromDatabase = JSON.parse(data)['data'];
+      } catch (err) {
+        dataFromDatabase = [];
+        console.log(`Файла нет (похоже это первый запуск): ${err}`);
+    }
 }
 
 async function parserAvitoProfile() {
@@ -27,34 +38,30 @@ async function parserAvitoProfile() {
         height: 900
     });
     await page.goto(URL_AVITO_PROFILE)
-    .catch((err) => console.log("Не получилось стартовать, т.к. не открылась страница профиля «Techno Trade» на Авито!"));
-    await page.waitForTimeout(1000);
-    cron.schedule(PARSING_FREQUENCY_PROFILE, function() {
-        (async () => { 
-            try {
-                await getDataFromDatabase();
-                await page.evaluate(() => {
-                    location.reload(true)
-                    console.log('2');
-                })
-                await page.waitForTimeout(2000);
-                await autoScroll(page, 50000);
-                let allAds = await page.$$('[data-marker="profile-items"] > div > div', e => e);
-                for(let elem of allAds) {
-                    let name = await elem.$eval('a', e => e.getAttribute('title'));
-                    name = name.split('«')[1].split('»')[0]
-                    let url = await elem.$eval('a', e => e.getAttribute('href'));
-                    let id = url.split('_').pop();
-                    let price = await elem.$eval('[itemprop="price"]', e => e.getAttribute('content'));
-                    let img = await elem.$eval('img', e => e.getAttribute('src'));
-                    handlerSingleAd(name, url, id, price, img)
-                }
-            } catch (err){
-                console.log(`Пропущена итерация обновления страницы, т.к. на странице сейчас отсутствуют нужные данные! ${err}`);
-            }
-            await updateDatainDatabase();
-        })();
-    });
+    .catch((err) => console.log(`Проблема с открытием страницы профиля: ${err}`));
+    await page.waitForTimeout(2000);
+    try {
+        await getDataFromDatabase();
+        await page.evaluate(() => {
+            location.reload(true)
+            console.log('2');
+        })
+        await page.waitForTimeout(1000);
+        await autoScroll(page, 50000);
+        let allAds = await page.$$('[data-marker="profile-items"] > div > div', e => e);
+        for(let elem of allAds) {
+            let name = await elem.$eval('a', e => e.getAttribute('title'));
+            name = name.split('«')[1].split('»')[0]
+            let url = await elem.$eval('a', e => e.getAttribute('href'));
+            let id = url.split('_').pop();
+            let price = await elem.$eval('[itemprop="price"]', e => e.getAttribute('content'));
+            let img = await elem.$eval('img', e => e.getAttribute('src'));
+            handlerSingleAd(name, url, id, price, img)
+        }
+    } catch (err){
+        console.log(`Пропущена итерация обновления страницы, т.к. на странице сейчас отсутствуют нужные данные! ${err}`);
+    }
+    await updateDatainDatabase();
 }
 
 async function autoScroll(page, maxScrolls){
@@ -76,17 +83,6 @@ async function autoScroll(page, maxScrolls){
             }, 60);
         });
     }, maxScrolls);
-}
-
-// getDataFromDatabase();
-async function getDataFromDatabase() {
-    try {
-        const data = fs.readFileSync('data.json', { encoding: 'utf8', flag: 'r' });
-        dataFromDatabase = JSON.parse(data)['data'];
-      } catch (err) {
-        dataFromDatabase = [];
-        console.log(`Файла нет (похоже это первый запуск): ${err}`);
-    }
 }
 
 function handlerSingleAd(name, url, id, price, img) {
@@ -117,16 +113,19 @@ function handlerSingleAd(name, url, id, price, img) {
 }
 
 async function updateDatainDatabase() {
-    if(dataForRecording.length) {
+    let lengthDataOld = dataFromDatabase.length;
+    let lengthDataNew = dataForRecording.length;
+
+    if(Math.floor(lengthDataOld*0,8) >= lengthDataNew <= Math.ceil(lengthDataOld*1,2)) {
         let formatedData = {};
         formatedData["data"] = dataForRecording;
         let data = JSON.stringify(formatedData, null, 2); 
         fs.writeFileSync('data.json', data); 
-        console.log("Записан файл data.json!");
+        console.log(`Успешно записан новый файл data.json! lengthDataNew = ${lengthDataNew}; lengthDataOld = ${lengthDataOld}`);
     } else {
-        console.log("При попытке записать в БД обновленные данные, они пришли пустые!");
+        console.log(`Err record new data: lengthDataNew = ${lengthDataNew}; lengthDataOld = ${lengthDataOld}; Разница больше 20%!`);
+        return false;
     }
-    dataForRecording = [];
     return;
 }
 
@@ -143,16 +142,9 @@ async function parserAvitoProduct() {
     cron.schedule(PARSING_FREQUENCY_PRODUCT, function() {
         if (dataFromDatabase.length) {
 
-
-
-
-
-
         } else {
             console.log(`В переменно dataFromDatabase поканичего нет, пропускаю апдейт данных!`)
         }
-
-
 
         // (async () => { 
         // })();
