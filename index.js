@@ -3,7 +3,7 @@ import puppeteer from 'puppeteer';
 import cron from 'node-cron';
 import fs from 'fs';
 
-const URL_AVITO_PROFILE = 'https://www.avito.ru/user/f9c2c9b95c387c86227f847540f011db/profile';
+const URL_AVITO_PROFILE = 'https://www.avito.ru/user/3bca7883e70b770fcca6536d8e7a3c8a/profile';
 const PARSING_FREQUENCY = '*/2 * * * *';
 let dataFromDatabase = [];
 let dataForRecording = [];
@@ -12,9 +12,17 @@ startParser();
 async function startParser() {
     dataFromDatabase = [];
     dataForRecording = [];
+    const browser = await launchBrowser();
     await getDataFromDatabase();
-    await parserAvitoProfile();
-    // await parserAvitoProduct();
+    // await parserAvitoProfile(browser);
+}
+
+async function launchBrowser() {
+    const browser = await puppeteer.launch({
+        userDataDir: '/tmp/chromeSessionForParserAvitoProfile',
+        headless: false
+    });
+    return browser;
 }
 
 async function getDataFromDatabase() {
@@ -27,11 +35,7 @@ async function getDataFromDatabase() {
     }
 }
 
-async function parserAvitoProfile() {
-    const browser = await puppeteer.launch({
-        userDataDir: '/tmp/chromeSessionForParserAvitoProfile',
-        headless: false
-    });
+async function parserAvitoProfile(browser) {
     const page = await browser.newPage();
     await page.setViewport({
         width: 1440,
@@ -40,6 +44,16 @@ async function parserAvitoProfile() {
     await page.goto(URL_AVITO_PROFILE)
     .catch((err) => console.log(`Проблема с открытием страницы профиля: ${err}`));
     await page.waitForTimeout(2000);
+    const h1 = await page.$eval('h1', el => el.textContent).catch((err) => console.log(`Отсутствует H1: ${err}`));
+    if(h1 == 'Пользователь не найден') {
+        console.log(`ERROR: h1 = 'Пользователь не найден' url = ${URL_AVITO_PROFILE}`);
+        return false;
+    }
+    const h2 = await page.$eval('h2', el => el.textContent).catch((err) => console.log(`Отсутствует H2: ${err}`));
+    if(h2 !== 'Объявления пользователя') {
+        console.log(`ERROR: h2 != 'Объявления пользователя' url = ${URL_AVITO_PROFILE}`);
+        return false;
+    }
     try {
         await getDataFromDatabase();
         await page.evaluate(() => {
@@ -116,14 +130,14 @@ async function updateDatainDatabase() {
     let lengthDataOld = dataFromDatabase.length;
     let lengthDataNew = dataForRecording.length;
 
-    if(Math.floor(lengthDataOld*0,8) >= lengthDataNew <= Math.ceil(lengthDataOld*1,2)) {
+    if(Math.floor(lengthDataOld*0.9) <= lengthDataNew) {
         let formatedData = {};
         formatedData["data"] = dataForRecording;
         let data = JSON.stringify(formatedData, null, 2); 
         fs.writeFileSync('data.json', data); 
         console.log(`Успешно записан новый файл data.json! lengthDataNew = ${lengthDataNew}; lengthDataOld = ${lengthDataOld}`);
     } else {
-        console.log(`Err record new data: lengthDataNew = ${lengthDataNew}; lengthDataOld = ${lengthDataOld}; Разница больше 20%!`);
+        console.log(`Err record new data: lengthDataNew = ${lengthDataNew}; lengthDataOld = ${lengthDataOld}; Разница больше 10%!`);
         return false;
     }
     return;
@@ -146,7 +160,5 @@ async function parserAvitoProduct() {
             console.log(`В переменно dataFromDatabase поканичего нет, пропускаю апдейт данных!`)
         }
 
-        // (async () => { 
-        // })();
     });
 }
