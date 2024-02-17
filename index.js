@@ -12,17 +12,8 @@ startParser();
 async function startParser() {
     dataFromDatabase = [];
     dataForRecording = [];
-    const browser = await launchBrowser();
     await getDataFromDatabase();
-    // await parserAvitoProfile(browser);
-}
-
-async function launchBrowser() {
-    const browser = await puppeteer.launch({
-        userDataDir: '/tmp/chromeSessionForParserAvitoProfile',
-        headless: false
-    });
-    return browser;
+    await parserAvitoProfile();
 }
 
 async function getDataFromDatabase() {
@@ -35,7 +26,11 @@ async function getDataFromDatabase() {
     }
 }
 
-async function parserAvitoProfile(browser) {
+async function parserAvitoProfile() {
+    const browser = await puppeteer.launch({
+        userDataDir: '/tmp/chromeSessionForParserAvitoProfile',
+        headless: false
+    });
     const page = await browser.newPage();
     await page.setViewport({
         width: 1440,
@@ -114,8 +109,8 @@ function handlerSingleAd(name, url, id, price, img) {
     objForPush["url"] = url;
     objForPush["price"] = price;
     objForPush["img_small"] = img;
-    objForPush["parse"] = {};
-    objForPush["parse"]["status"] = "low";
+    objForPush["parser"] = {};
+    objForPush["parser"]["status"] = "low";
     objForPush["vkPost"] = {};
     objForPush["vkPost"]["status"] = "unpublished";
     objForPush["vkProduct"] = {};
