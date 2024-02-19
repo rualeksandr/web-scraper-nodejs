@@ -12,8 +12,9 @@ startParser();
 async function startParser() {
     dataFromDatabase = [];
     dataForRecording = [];
-    await getDataFromDatabase();
+    await getDataFromDatabase()
     await parserAvitoProfile();
+    await parserFullAd();
 }
 
 async function getDataFromDatabase() {
@@ -71,6 +72,8 @@ async function parserAvitoProfile() {
         console.log(`Пропущена итерация обновления страницы, т.к. на странице сейчас отсутствуют нужные данные! ${err}`);
     }
     await updateDatainDatabase();
+    await page.close();
+    await browser.close();
 }
 
 async function autoScroll(page, maxScrolls){
@@ -138,22 +141,75 @@ async function updateDatainDatabase() {
     return;
 }
 
-async function parserAvitoProduct() {
+async function parserFullAd() {
+    await getDataFromDatabase();
+    dataForRecording = [];
     const browser = await puppeteer.launch({
-        userDataDir: '/tmp/chromeSessionForParserAvitoProduct',
+        userDataDir: '/tmp/chromeSessionForParserAvitoProfile',
         headless: false
     });
-    const page = await browser.newPage();
-    await page.setViewport({
-        width: 1440,
-        height: 900
-    });
-    cron.schedule(PARSING_FREQUENCY_PRODUCT, function() {
-        if (dataFromDatabase.length) {
-
+    for(let elem of dataFromDatabase) {
+        let elemForRecording = elem;
+        if(elem.parser.status == 'low') {
+            const page = await browser.newPage();
+            await page.setViewport({
+                width: 1440,
+                height: 900
+            });
+            await page.goto('https://www.avito.ru' + elem.url)
+            .catch((err) => console.log(`Проблема с открытием страницы одного объявления: ${err}`));
+            await page.waitForTimeout(2000);
+            const description = await page.$eval('[data-marker="item-view/item-description"]', el => el.innerText)
+            .catch((err) => console.log(`Проблема с получением description: ${err}`));
+            elemForRecording["parser"]["description"] = description;
+            await page.waitForTimeout(2000);
+            const breadcrumbs = await page.$$('[data-marker="breadcrumbs"] > span', e => e)
+            .catch((err) => console.log(`Проблема с получением breadcrumbs: ${err}`));
+            const lastBreadcrumb = await breadcrumbs[breadcrumbs.length - 1].$eval('a', e => e.getAttribute('title'))
+            .catch((err) => console.log(`Проблема с получением title у последнего элемента из breadcrumbs: ${err}`));
+            elemForRecording["parser"]["category"] = lastBreadcrumb;
+            await page.waitForTimeout(2000);
+            const listPreviewPhoto = await page.$$('[data-marker="image-preview/preview-wrapper"] > li:not([data-type="video"])', e => e)
+            .catch((err) => console.log(`Проблема с получением listPreviewPhoto: ${err}`));
+            elemForRecording["parser"]["images"] = [];
+            elemForRecording["parser"]["imagesPath"] = [];
+            for(let img of listPreviewPhoto) {
+                img.click();
+                await page.waitForTimeout(1000);
+                const imgUrl = await page.$eval('[data-marker="image-frame/image-wrapper"] > img', e => e.getAttribute('src'))
+                .catch((err) => console.log(`Проблема с получением imgUrl: ${err}`));
+                await page.waitForTimeout(1000);
+                elemForRecording["parser"]["images"].push(imgUrl);
+                await page.waitForTimeout(1000);
+                const pageIMG = await browser.newPage();
+                await pageIMG.setViewport({
+                    width: 1440,
+                    height: 900
+                });
+                let viewSource = await pageIMG.goto(imgUrl);
+                await pageIMG.waitForTimeout(2000);
+                await fs.promises.mkdir(`./images/${elemForRecording['id']}/`, { recursive: true }).catch(console.error);
+                fs.writeFile(`./images/${elemForRecording['id']}/${elemForRecording['parser']['images'].length - 1}.webp`, await viewSource.buffer(), function (err) {
+                if (err) {
+                    console.log(err);
+                    return console.log(err);
+                }
+                    console.log("The file was saved!");
+                });
+                elemForRecording["parser"]["imagesPath"].push(`images/${elemForRecording['id']}/${elemForRecording['parser']['images'].length - 1}.webp`);
+                await pageIMG.waitForTimeout(1000);
+                await pageIMG.close();
+            }
+            elemForRecording["parser"]["status"] = "high";
+            await page.close();
+        } else if(elem.parser.status == 'high') {
+            console.log(`Пропускаю парсинг объявления id:${elem.id} title:${elem.title} т.к. данные по нему уже есть в БД!`);
         } else {
-            console.log(`В переменно dataFromDatabase поканичего нет, пропускаю апдейт данных!`)
+            console.log(`Пропускаю парсинг объявления id:${elem.id} title:${elem.title} т.к. у него неизвестный parse.status:${elem.parser.status}!`);
         }
-
-    });
+        dataForRecording.push(elemForRecording);
+        elemForRecording = {};
+    }
+    await browser.close();
+    await updateDatainDatabase();
 }
