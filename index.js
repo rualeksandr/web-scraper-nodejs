@@ -13,7 +13,7 @@ async function startParser() {
     dataFromDatabase = [];
     dataForRecording = [];
     await getDataFromDatabase()
-    await parserAvitoProfile();
+    // await parserAvitoProfile();
     await parserFullAd();
 }
 
@@ -127,7 +127,6 @@ function handlerSingleAd(name, url, id, price, img) {
 async function updateDatainDatabase() {
     let lengthDataOld = dataFromDatabase.length;
     let lengthDataNew = dataForRecording.length;
-
     if(Math.floor(lengthDataOld*0.9) <= lengthDataNew) {
         let formatedData = {};
         formatedData["data"] = dataForRecording;
@@ -208,7 +207,10 @@ async function parserFullAd() {
             console.log(`Пропускаю парсинг объявления id:${elem.id} title:${elem.title} т.к. у него неизвестный parse.status:${elem.parser.status}!`);
         }
         dataForRecording.push(elemForRecording);
+        console.log('LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL')
+        console.log(elemForRecording)
         elemForRecording = {};
+        
     }
     await browser.close();
     await updateDatainDatabase();
