@@ -12,9 +12,9 @@ startParser();
 async function startParser() {
     dataFromDatabase = [];
     dataForRecording = [];
-    await getDataFromDatabase()
+    // await getDataFromDatabase()
     // await parserAvitoProfile();
-    await parserFullAd();
+    // await parserFullAd();
 }
 
 async function getDataFromDatabase() {
