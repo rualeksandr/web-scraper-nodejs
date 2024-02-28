@@ -1,8 +1,10 @@
 'use strict'; 
 import fs from 'fs';
-import axios from 'axios';
 import FormData from 'form-data';
 import { VK_API } from './token_private.js';
+import vkApiService from './api/vkApiService.js'
+
+const vkApi = vkApiService();
 
 async function uploadProductPhoto(imgPath) {
     try {
@@ -16,48 +18,32 @@ async function uploadProductPhoto(imgPath) {
     }
 }
 
-async function getPhotoUploadServer() {
-    const { data } = await axios.post('https://api.vk.com/method/market.getProductPhotoUploadServer', {
-        access_token: VK_API.access_token,
-        v: VK_API.v,
-        group_id: VK_API.group_id
-    }, {
-        headers: {
-        'Content-Type': 'multipart/form-data'
-        }
-    });
-    return data.response.upload_url;
+const getPhotoUploadServer = async () => {
+    const form = new FormData();
+    form.append('access_token', VK_API.access_token);
+    form.append('v', VK_API.v);
+    form.append('group_id', VK_API.group_id);
+
+    const res =  vkApi.getProductPhotoUploadServer(form);
+    return res;
 }
 
-async function uploadPhoto(url, imgPath) {
+const uploadPhoto = async (url, imgPath) => {
     const form = new FormData();
     form.append('file', fs.createReadStream(imgPath));
-    const request_config = {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-            ...form.getHeaders()
-        }
-    };
-    const { data } = await axios.post(url, form, request_config);
-    return JSON.stringify(data);
+
+    const res = await vkApi.uploadPhoto(url, form)
+    return res;
 }
 
-async function saveProductPhoto(uploadResponse) {
-    const form = {
-        'access_token': VK_API.access_token,
-        'v': VK_API.v,
-        'upload_response': uploadResponse
-    }
-    const { data } = await axios.post('https://api.vk.com/method/market.saveProductPhoto', form, {
-        headers: {
-        'Content-Type': 'multipart/form-data'
-        }
-    });
-    if (data.response.photo_id) {
-        return data.response.photo_id;
-    } else {
-        throw new Error("Ошибка при сохранении фотографии товара. Ответ: ", data);
-    }
-}
+const saveProductPhoto = async (uploadResponse) => {
+    const form = new FormData();
+    form.append('access_token', VK_API.access_token);
+    form.append('v', VK_API.v);
+    form.append('upload_response', uploadResponse);
+
+    const res = await vkApi.saveProductPhoto(form)
+    return res;
+};
 
 uploadProductPhoto('./images/3237220546/0.webp');
