@@ -7,8 +7,6 @@ async function run() {
     const statusIds = await updateProductsArray(dataProfile);
     const changedstatusToHigh = await advancedParsingAd();
 
-    
-
     return changedstatusToHigh;
 }
 console.log(await run());
